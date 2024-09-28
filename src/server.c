@@ -7,10 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <unistd.h>
 
 #include "hreversal.h"
+#include "sha256.h"
 
 #define QUEUE_SIZE 10
 
@@ -20,12 +20,6 @@ struct server
 };
 
 static struct server* current_server = NULL;
-
-static void hash_to_str(char* str, uint8_t hash[SHA256_DIGEST_LENGTH])
-{
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
-        sprintf(str + i * 2, "%02x", hash[i]);
-}
 
 static void close_server()
 {
@@ -73,7 +67,7 @@ void open_server(uint32_t port, int reuse)
     }
 
     struct sockaddr_in server_addr;
-    bzero((char*)&server_addr, sizeof(server_addr));
+    memset((char*)&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
