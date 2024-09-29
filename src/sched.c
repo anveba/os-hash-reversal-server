@@ -8,7 +8,7 @@
 
 #include "hreversal.h"
 
-#define COMPUTATION_UNIT 1000
+#define COMPUTATION_UNIT 2000
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -18,14 +18,9 @@ struct task_slice
     uint64_t start, end;
 };
 
-// Thread unsafe
-static void sched_add_task_to_list(struct scheduler* sched, struct task* task, uint8_t priority)
+static uint64_t task_key(struct task* task)
 {
-    task->next = sched->expired_tasks[priority].next;
-    task->prev = &sched->expired_tasks[priority];
-    if (sched->expired_tasks[priority].next)
-        sched->expired_tasks[priority].next->prev = task;
-    sched->expired_tasks[priority].next = task;
+    return (task->end - task->progress) / (task->priority + 1);
 }
 
 void sched_add_task(struct scheduler* sched,
@@ -43,12 +38,13 @@ void sched_add_task(struct scheduler* sched,
     task->start = start;
     task->end = end;
     task->progress = start;
+    task->priority = priority;
 
     task->id = task_id;
     task->workers = 0;
     task->done = 0;
 
-    sched_add_task_to_list(sched, task, priority);
+    pqueue_insert(&sched->pq, task_key(task), task);
 
     pthread_mutex_unlock(&sched->mtx);
 
@@ -62,13 +58,8 @@ static void sched_finalise_task(struct scheduler* sched, struct task* task, stru
 
     pthread_mutex_lock(&sched->mtx);
 
-    if (result->success) {
-        if (task->prev)
-            task->prev->next = task->next;
-        if (task->next)
-            task->next->prev = task->prev;
+    if (result->success)
         task->done = 1;
-    }
 
     assert(task->workers > 0);
 
@@ -79,7 +70,8 @@ static void sched_finalise_task(struct scheduler* sched, struct task* task, stru
     pthread_mutex_unlock(&sched->mtx);
 }
 
-static void sched_get_task(struct scheduler* sched, struct task_slice* task_slice)
+// Return whether abort signal was caught.
+static int sched_get_task(struct scheduler* sched, struct task_slice* task_slice)
 {
     pthread_mutex_lock(&sched->mtx);
 
@@ -87,53 +79,47 @@ static void sched_get_task(struct scheduler* sched, struct task_slice* task_slic
 
     // Continue searching for a task. If no task is available, wait.
     while (1) {
+        if (sched->abort)
+            break;
 
-        // Search the active list then the expired list.
-        struct task* initial_active = sched->active_tasks;
-        do {
-            // Search each linked list for each priority level.
-            for (; sched->current < PRIORITY_LEVELS; sched->current++) {
-                if (sched->active_tasks[sched->current].next != NULL) {
-                    task = sched->active_tasks[sched->current].next;
-                    sched->active_tasks[sched->current].next = task->next;
-                    if (task->next)
-                        task->next->prev = &sched->active_tasks[sched->current];
-                    task->next = task->prev = NULL;
-                    goto task_found;
-                }
-            }
+        if (!pqueue_empty(&sched->pq)) {
+            struct pq_item item;
+            pqueue_min(&sched->pq, &item);
+            task = item.value;
 
-            // Swap active and expired tasks.
-            struct task* temp = sched->active_tasks;
-            sched->active_tasks = sched->expired_tasks;
-            sched->expired_tasks = temp;
-            sched->current = 0;
+            task_slice->start = task->progress;
+            task_slice->end = MIN(task->progress + COMPUTATION_UNIT, task->end);
+            task_slice->task = task;
 
-        } while (sched->active_tasks != initial_active);
+            task->progress = task_slice->end;
+            task->workers++;
+
+            // If this is the last slice, remove it from the task queue
+            if (task->progress >= task->end)
+                pqueue_remove_min(&sched->pq);
+            else
+                pqueue_decrease_min(&sched->pq, task_key(task));
+
+            break;
+        }
+
         assert(task == NULL);
         pthread_cond_wait(&sched->wait_cond, &sched->mtx);
     }
-task_found:
 
-    task_slice->start = task->progress;
-    task_slice->end = MIN(task->progress + COMPUTATION_UNIT * (sched->current + 1), task->end);
-    task_slice->task = task;
-
-    task->progress = task_slice->end;
-    task->workers++;
-
-    // Add task back to list if it's not done.
-    if (task->progress < task->end)
-        sched_add_task_to_list(sched, task, sched->current);
+    int abort = sched->abort;
 
     pthread_mutex_unlock(&sched->mtx);
+
+    return abort;
 }
 
 static void sched_thread_loop(struct scheduler* sched)
 {
     while (1) {
         struct task_slice task_slice;
-        sched_get_task(sched, &task_slice);
+        if (sched_get_task(sched, &task_slice))
+            break;
 
         struct reversal_result result;
         reverse_hash(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
@@ -158,15 +144,9 @@ void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t))
     sched->threads = malloc(sizeof(pthread_t) * sched->thread_count);
     pthread_mutex_init(&sched->mtx, NULL);
     pthread_cond_init(&sched->wait_cond, NULL);
+    sched->abort = 0;
 
-    sched->active_tasks = sched->task_list1;
-    sched->expired_tasks = sched->task_list2;
-    sched->current = 0;
-
-    for (int i = 0; i < PRIORITY_LEVELS; i++) {
-        sched->expired_tasks[i].next = sched->active_tasks[i].next = NULL;
-        sched->expired_tasks[i].prev = sched->active_tasks[i].prev = NULL;
-    }
+    pqueue_init(&sched->pq);
 
     sched->callback = callback;
 
@@ -176,12 +156,20 @@ void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t))
 
 void sched_destroy(struct scheduler* sched)
 {
-    // TODO free linked lists and stop threads more elegantly
+    pthread_mutex_lock(&sched->mtx);
+
+    sched->abort = 1;
+
+    pthread_mutex_unlock(&sched->mtx);
+
+    pthread_cond_broadcast(&sched->wait_cond);
 
     for (int i = 0; i < sched->thread_count; i++)
-        pthread_cancel(sched->threads[i]);
+        pthread_join(sched->threads[i], NULL);
 
     free(sched->threads);
+    pqueue_destroy(&sched->pq);
+
     pthread_mutex_destroy(&sched->mtx);
     pthread_cond_destroy(&sched->wait_cond);
 }

@@ -3,9 +3,8 @@
 
 #include <pthread.h>
 
+#include "pqueue.h"
 #include "sha256.h"
-
-#define PRIORITY_LEVELS 16
 
 struct task
 {
@@ -13,12 +12,11 @@ struct task
     uint64_t start;
     uint64_t end;
     uint64_t progress;
+    uint8_t priority;
 
     int id;
     uint32_t workers;
     uint8_t done;
-
-    struct task *prev, *next;
 };
 
 struct scheduler
@@ -27,11 +25,9 @@ struct scheduler
     uint32_t thread_count;
     pthread_mutex_t mtx;
     pthread_cond_t wait_cond;
+    uint8_t abort;
 
-    // TODO currently task lists are wasting memory; only the linked list part is used.
-    struct task task_list1[PRIORITY_LEVELS], task_list2[PRIORITY_LEVELS];
-    struct task *expired_tasks, *active_tasks;
-    uint32_t current;
+    struct pqueue pq;
 
     // Arguments are task ID and result.
     void (*callback)(int, uint64_t);
