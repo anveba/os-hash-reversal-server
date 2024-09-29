@@ -3,7 +3,7 @@ FLAGS := -DSB_VERBOSE -Wall -std=gnu11
 DEBUG_FLAGS = -p -g3
 RELEASE_FLAGS = -O3 -flto -DNDEBUG
 INCLUDE := -Isrc -Ivendor
-LINK := -lcrypto -lssl
+LINK := -lpthread # -lcrypto -lssl
 
 CCFLAGS := $(FLAGS) $(INCLUDE)
 LDFLAGS := $(FLAGS)

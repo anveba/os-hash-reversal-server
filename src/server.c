@@ -1,4 +1,3 @@
-#include "messages.h"
 #include <endian.h>
 #include <errno.h>
 #include <netdb.h>
@@ -10,13 +9,21 @@
 #include <unistd.h>
 
 #include "hreversal.h"
+#include "sched.h"
 #include "sha256.h"
+
+#define PACKET_REQUEST_SIZE (SHA256_LEN + 8 + 8 + 1)
+#define PACKET_REQUEST_HASH_OFFSET 0
+#define PACKET_REQUEST_START_OFFSET (SHA256_LEN)
+#define PACKET_REQUEST_END_OFFSET (SHA256_LEN + 8)
+#define PACKET_REQUEST_PRIO_OFFSET (SHA256_LEN + 8 + 8)
 
 #define QUEUE_SIZE 10
 
 struct server
 {
     int socket_fd;
+    struct scheduler sched;
 };
 
 static struct server* current_server = NULL;
@@ -28,6 +35,7 @@ static void close_server()
     printf("Closing server...\n");
     close(current_server->socket_fd);
     current_server->socket_fd = -1;
+    sched_destroy(&current_server->sched);
     current_server = NULL;
     signal(SIGINT, SIG_DFL);
 }
@@ -41,6 +49,62 @@ static void sigint_handler(int sig)
     exit(0);
 }
 
+static void server_respond(int client_socket_fd, uint64_t result)
+{
+    uint64_t response = htobe64(result);
+    int n = write(client_socket_fd, &response, sizeof(response));
+
+#ifdef SB_VERBOSE
+    printf("\n[ RESPONSE TO %d ]\nRES   %ld\n", client_socket_fd, result);
+#endif
+
+    if (n < 0)
+        printf("Error on writing to client: %s\n", strerror(errno));
+
+    close(client_socket_fd);
+}
+
+static void server_loop(struct server* serv)
+{
+    while (1) {
+        struct sockaddr_in client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        int client_socket_fd = accept(serv->socket_fd, (struct sockaddr*)&client_addr, &client_len);
+
+        if (client_socket_fd < 0) {
+            printf("Error on accept: %s\n", strerror(errno));
+            break;
+        }
+
+        uint8_t buffer[PACKET_REQUEST_SIZE];
+        int n = read(client_socket_fd, buffer, PACKET_REQUEST_SIZE);
+
+        if (n == 0) { // EOF
+            close(client_socket_fd);
+            break;
+        }
+
+        if (n < 0) {
+            printf("Error on reading client message: %s\n", strerror(errno));
+            break;
+        }
+
+        uint8_t* target_hash = buffer + PACKET_REQUEST_HASH_OFFSET;
+        uint64_t start = be64toh(*((uint64_t*)(buffer + PACKET_REQUEST_START_OFFSET)));
+        uint64_t end = be64toh(*((uint64_t*)(buffer + PACKET_REQUEST_END_OFFSET)));
+        uint8_t priority = buffer[PACKET_REQUEST_PRIO_OFFSET];
+
+#ifdef SB_VERBOSE
+        printf("\n[ NEW REQUEST FROM %d ]\n", client_socket_fd);
+        char hash_str[65];
+        hash_to_str(hash_str, target_hash);
+        printf("HASH  %s\nPRIOR %d\nSTART %ld\nEND   %ld\n", hash_str, priority, start, end);
+#endif
+
+        sched_add_task(&serv->sched, client_socket_fd, target_hash, start, end, priority - 1);
+    }
+}
+
 void open_server(uint32_t port, int reuse)
 {
     if (current_server != NULL) {
@@ -51,8 +115,10 @@ void open_server(uint32_t port, int reuse)
     printf("Opening server...\n");
 
     signal(SIGINT, sigint_handler);
+
     struct server serv;
     serv.socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    sched_init(&serv.sched, server_respond);
     current_server = &serv;
 
     if (reuse) {
@@ -86,57 +152,7 @@ void open_server(uint32_t port, int reuse)
 
     printf("Listening...\n");
 
-    while (1) {
-        struct sockaddr_in client_addr;
-        socklen_t client_len = sizeof(client_addr);
-        int client_socket_fd = accept(serv.socket_fd, (struct sockaddr*)&client_addr, &client_len);
-
-        if (client_socket_fd < 0) {
-            printf("Error on accept: %s\n", strerror(errno));
-            break;
-        }
-
-        uint8_t buffer[PACKET_REQUEST_SIZE];
-        int n = read(client_socket_fd, buffer, PACKET_REQUEST_SIZE);
-
-        if (n == 0) { // EOF
-            close(client_socket_fd);
-            break;
-        }
-
-        if (n < 0) {
-            printf("Error on reading client message: %s\n", strerror(errno));
-            break;
-        }
-
-        uint8_t* target_hash = buffer + PACKET_REQUEST_HASH_OFFSET;
-        uint64_t start = be64toh(*((uint64_t*)(buffer + PACKET_REQUEST_START_OFFSET)));
-        uint64_t end = be64toh(*((uint64_t*)(buffer + PACKET_REQUEST_END_OFFSET)));
-        uint8_t priority = buffer[PACKET_REQUEST_PRIO_OFFSET];
-
-#ifdef SB_VERBOSE
-        printf("\n[ NEW REQUEST FROM %d ]\n", client_socket_fd);
-        char hash_str[65];
-        hash_to_str(hash_str, target_hash);
-        printf("HASH  %s\nPRIOR %d\nSTART %ld\nEND   %ld\n", hash_str, priority, start, end);
-#endif
-
-        uint64_t reversal_result = reverse_hash(target_hash, start, end);
-
-#ifdef SB_VERBOSE
-        printf("\n[ RESPONSE TO %d ]\nRES   %ld\n", client_socket_fd, reversal_result);
-#endif
-
-        uint64_t response = htobe64(reversal_result);
-        n = write(client_socket_fd, &response, sizeof(response));
-
-        if (n < 0) {
-            printf("Error on writing to client: %s\n", strerror(errno));
-            break;
-        }
-
-        close(client_socket_fd);
-    }
+    server_loop(&serv);
 
     close_server();
 
