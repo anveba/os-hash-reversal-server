@@ -3,8 +3,18 @@
 
 #include <pthread.h>
 
+#include "htable.h"
 #include "pqueue.h"
 #include "sha256.h"
+
+struct tid_list;
+
+struct tid_list
+{
+    int id;
+    uint8_t priority;
+    struct tid_list* next;
+};
 
 struct task
 {
@@ -12,10 +22,9 @@ struct task
     uint64_t start;
     uint64_t end;
     uint64_t progress;
-    uint8_t priority;
 
-    int id;
-    uint32_t workers;
+    pq_node_t pq_node;
+    struct tid_list tids;
     uint8_t done;
 };
 
@@ -28,6 +37,7 @@ struct scheduler
     uint8_t abort;
 
     struct pqueue pq;
+    struct htable ht;
 
     // Arguments are task ID and result.
     void (*callback)(int, uint64_t);
