@@ -8,7 +8,7 @@
 #define RROT(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 
 // SHA256 hashing function optimised for a 64-bit input size.
-void sha256(uint64_t input, uint8_t hash[SHA256_LEN])
+void sha256_simd(uint64_t input[VEC_SIZE], vec_t hash[OUTPUT_VECS])
 {
     static const uint32_t k[64] = {
         0x428a2f98,
@@ -77,41 +77,53 @@ void sha256(uint64_t input, uint8_t hash[SHA256_LEN])
         0xc67178f2
     };
 
-    const uint32_t h0 = 0x6a09e667;
-    const uint32_t h1 = 0xbb67ae85;
-    const uint32_t h2 = 0x3c6ef372;
-    const uint32_t h3 = 0xa54ff53a;
-    const uint32_t h4 = 0x510e527f;
-    const uint32_t h5 = 0x9b05688c;
-    const uint32_t h6 = 0x1f83d9ab;
-    const uint32_t h7 = 0x5be0cd19;
+    const uint32_t hs[8] = { 0x6a09e667,
+                             0xbb67ae85,
+                             0x3c6ef372,
+                             0xa54ff53a,
+                             0x510e527f,
+                             0x9b05688c,
+                             0x1f83d9ab,
+                             0x5be0cd19 };
 
     // Prepare first 512-bit chunk with proper endianness
-    uint32_t w[64];
-    w[0] = be32toh(((uint32_t*)&input)[0]);
-    w[1] = be32toh(((uint32_t*)&input)[1]);
-    w[2] = 0x80000000;
-    w[15] = sizeof(uint64_t) * 8;
-    for (int i = 3; i < 15; i++)
-        w[i] = 0;
+    vec_t w[64];
+    for (int i = 0; i < VEC_SIZE; i++) {
+        w[0][i] = be32toh(((uint32_t*)(input + i))[0]);
+        w[1][i] = be32toh(((uint32_t*)(input + i))[1]);
+        w[2][i] = 0x80000000;
+        w[15][i] = sizeof(uint64_t) * 8;
+        for (int j = 3; j < 15; j++)
+            w[j][i] = 0;
+    }
 
     // Fill the rest of the message schedule array (w)
     for (int i = 16; i < 64; i++) {
-        uint32_t s0 = RROT(w[i - 15], 7) ^ RROT(w[i - 15], 18) ^ (w[i - 15] >> 3);
-        uint32_t s1 = RROT(w[i - 2], 17) ^ RROT(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        vec_t s0 = RROT(w[i - 15], 7) ^ RROT(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        vec_t s1 = RROT(w[i - 2], 17) ^ RROT(w[i - 2], 19) ^ (w[i - 2] >> 10);
         w[i] = w[i - 16] + s0 + w[i - 7] + s1;
     }
 
-    uint32_t a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+    vec_t a, b, c, d, e, f, g, h;
+    for (int i = 0; i < VEC_SIZE; i++) {
+        a[i] = hs[0];
+        b[i] = hs[1];
+        c[i] = hs[2];
+        d[i] = hs[3];
+        e[i] = hs[4];
+        f[i] = hs[5];
+        g[i] = hs[6];
+        h[i] = hs[7];
+    }
 
     // Main loop
     for (int i = 0; i < 64; i++) {
-        uint32_t s1 = RROT(e, 6) ^ RROT(e, 11) ^ RROT(e, 25);
-        uint32_t ch = (e & f) ^ ((~e) & g);
-        uint32_t temp1 = h + s1 + ch + k[i] + w[i];
-        uint32_t s0 = RROT(a, 2) ^ RROT(a, 13) ^ RROT(a, 22);
-        uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
-        uint32_t temp2 = s0 + maj;
+        vec_t s1 = RROT(e, 6) ^ RROT(e, 11) ^ RROT(e, 25);
+        vec_t ch = (e & f) ^ ((~e) & g);
+        vec_t temp1 = h + s1 + ch + k[i] + w[i];
+        vec_t s0 = RROT(a, 2) ^ RROT(a, 13) ^ RROT(a, 22);
+        vec_t maj = (a & b) ^ (a & c) ^ (b & c);
+        vec_t temp2 = s0 + maj;
         h = g;
         g = f;
         f = e;
@@ -121,16 +133,27 @@ void sha256(uint64_t input, uint8_t hash[SHA256_LEN])
         b = a;
         a = temp1 + temp2;
     }
+    hash[0] = a;
+    hash[1] = b;
+    hash[2] = c;
+    hash[3] = d;
+    hash[4] = e;
+    hash[5] = f;
+    hash[6] = g;
+    hash[7] = h;
+}
 
-    // Complete final hash (with proper endianness)
-    ((uint32_t*)hash)[0] = htobe32(a + h0);
-    ((uint32_t*)hash)[1] = htobe32(b + h1);
-    ((uint32_t*)hash)[2] = htobe32(c + h2);
-    ((uint32_t*)hash)[3] = htobe32(d + h3);
-    ((uint32_t*)hash)[4] = htobe32(e + h4);
-    ((uint32_t*)hash)[5] = htobe32(f + h5);
-    ((uint32_t*)hash)[6] = htobe32(g + h6);
-    ((uint32_t*)hash)[7] = htobe32(h + h7);
+void hash_prepare(uint8_t hash[SHA256_LEN])
+{
+    uint32_t* h32 = (uint32_t*)hash;
+    h32[0] = be32toh(h32[0]) - 0x6a09e667;
+    h32[1] = be32toh(h32[1]) - 0xbb67ae85;
+    h32[2] = be32toh(h32[2]) - 0x3c6ef372;
+    h32[3] = be32toh(h32[3]) - 0xa54ff53a;
+    h32[4] = be32toh(h32[4]) - 0x510e527f;
+    h32[5] = be32toh(h32[5]) - 0x9b05688c;
+    h32[6] = be32toh(h32[6]) - 0x1f83d9ab;
+    h32[7] = be32toh(h32[7]) - 0x5be0cd19;
 }
 
 void hash_to_str(char* str, uint8_t hash[SHA256_LEN])

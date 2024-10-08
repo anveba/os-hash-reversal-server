@@ -16,6 +16,9 @@ int main(int argc, char** argv)
             printf("Argument not a number.\n");
             return 1;
         }
+#ifdef SB_USE_SIMD
+        printf("SIMD enabled.\n");
+#endif
         open_server(port, 0);
     }
 }

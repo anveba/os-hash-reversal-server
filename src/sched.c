@@ -155,8 +155,11 @@ static void sched_thread_loop(struct scheduler* sched)
             break;
 
         struct reversal_result result;
-        reverse_hash(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
-
+#ifdef SB_USE_SIMD
+        reverse_hash_simd(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
+#else
+        reverse_hash_openssl(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
+#endif
         sched_finalise_task(sched, task_slice.task, &result);
     }
 }

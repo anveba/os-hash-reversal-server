@@ -2,18 +2,67 @@
 
 #include <assert.h>
 #include <endian.h>
+#include <memory.h>
+#include <openssl/sha.h>
 
-void reverse_hash(uint8_t target_hash[SHA256_LEN],
-                  uint64_t start,
-                  uint64_t end,
-                  uint8_t* abort,
-                  struct reversal_result* result)
+void reverse_hash_simd(uint8_t target_hash[SHA256_LEN],
+                       uint64_t start,
+                       uint64_t end,
+                       uint8_t* abort,
+                       struct reversal_result* result)
+{
+    vec_t target_hash_vectors[OUTPUT_VECS];
+    for (int i = 0; i < OUTPUT_VECS; i++)
+        for (int j = 0; j < VEC_SIZE; j++)
+            memcpy(&target_hash_vectors[i][j], target_hash + i * sizeof(uint32_t), sizeof(uint32_t));
+
+    uint64_t rounds = end - start;
+    if (rounds % VEC_SIZE == 0)
+        rounds = rounds / VEC_SIZE;
+    else
+        rounds = rounds / VEC_SIZE + 1;
+
+    for (uint64_t i = 0; i < rounds; i++) {
+        if (*abort)
+            break;
+        vec_t candidate_hash[OUTPUT_VECS];
+        uint64_t le[VEC_SIZE];
+        for (int j = 0; j < VEC_SIZE; j++)
+            le[j] = htole64(start + i * VEC_SIZE + j);
+
+        sha256_simd(le, candidate_hash);
+
+        vec_t res = (candidate_hash[0] == target_hash_vectors[0]);
+        for (int j = 1; j < OUTPUT_VECS; j++) {
+            res = (res & (candidate_hash[j] == target_hash_vectors[j]));
+        }
+
+        for (int j = 0; j < VEC_SIZE; j++) {
+            if (res[j]) {
+                result->success = 1;
+                result->result = start + i * VEC_SIZE + j;
+                return;
+            }
+        }
+    }
+    result->success = 0;
+}
+
+void reverse_hash_openssl(uint8_t target_hash[SHA256_LEN],
+                          uint64_t start,
+                          uint64_t end,
+                          uint8_t* abort,
+                          struct reversal_result* result)
 {
     for (uint64_t i = start; i < end; i++) {
         if (*abort)
             break;
         uint8_t candidate_hash[SHA256_LEN];
-        sha256(htole64(i), candidate_hash);
+        uint64_t le = htole64(i);
+        SHA256_CTX ctx;
+        SHA256_Init(&ctx);
+        SHA256_Update(&ctx, &le, 8);
+        SHA256_Final(candidate_hash, &ctx);
         if (hash_equals(candidate_hash, target_hash)) {
             result->success = 1;
             result->result = i;
