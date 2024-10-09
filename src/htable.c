@@ -68,7 +68,7 @@ struct ht_item* htable_add(struct htable* ht, struct task* task)
 struct ht_item* htable_get(struct htable* ht, uint8_t hash[SHA256_LEN])
 {
     for (size_t idx = htable_index_of(ht, *((size_t*)hash)); ht->items[idx].task; idx = htable_index_of(ht, idx + 1))
-        if (hash_equals(ht->items[idx].task->hash, hash))
+        if (!memcmp(ht->items[idx].task->hash, hash, SHA256_LEN))
             return ht->items + idx;
     return NULL;
 }

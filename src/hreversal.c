@@ -71,7 +71,7 @@ void reverse_hash_openssl(uint8_t target_hash[SHA256_LEN],
         SHA256_Update(&ctx, &le, 8);
         SHA256_Final(candidate_hash, &ctx);
 
-        if (hash_equals(candidate_hash, target_hash)) {
+        if (!memcmp(candidate_hash, target_hash, SHA256_LEN)) {
             result->success = 1;
             result->result = i;
             return;
