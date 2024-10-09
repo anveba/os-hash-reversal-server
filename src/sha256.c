@@ -143,7 +143,7 @@ void sha256_simd(uint64_t input[VEC_SIZE], vec_t hash[OUTPUT_VECS])
     hash[7] = h;
 }
 
-void hash_prepare(uint8_t hash[SHA256_LEN])
+void hash_prepare_for_simd(uint8_t hash[SHA256_LEN])
 {
     uint32_t* h32 = (uint32_t*)hash;
     h32[0] = be32toh(h32[0]) - 0x6a09e667;

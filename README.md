@@ -1,7 +1,7 @@
 # General
 
-Program created for DTU course 02159 Operating Systems.
+Program created for DTU course 02159 Operating Systems. It currently has thread scheduling and hash table lookups for for previously-completed requests. 
 
 # Code Structure
 
-Source code lies in the `src` directory.
+Source code is in the `src` directory. Main function is in `main.c`. Server and networking code is in `server.c`. Scheduling code in is `sched.c` (and accompanying priority queue is in `pqueue.c`). Hash bruteforcing code is in `hreversal.c` and custom SHA256 hashing code is in `sha256.c`. 

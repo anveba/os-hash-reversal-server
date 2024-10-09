@@ -18,6 +18,7 @@ struct task_slice
     uint64_t start, end;
 };
 
+// Computes the internally used priority of the task (smaller is higher priority)
 static uint64_t task_key(struct task* task)
 {
     uint64_t total_priority = 0;
@@ -84,27 +85,26 @@ static void sched_send_result_and_free(struct scheduler* sched, struct tid_list*
     free(tid);
 }
 
-static void sched_finalise_task(struct scheduler* sched, struct task* task, struct reversal_result* result)
+static void sched_finalise_task(struct scheduler* sched, struct task* task, uint64_t result)
 {
     pthread_mutex_lock(&sched->mtx);
 
-    if (result->success) {
-        sched->callback(task->tids.id, result->result);
-        sched_send_result_and_free(sched, task->tids.next, result->result);
-        task->tids.next = NULL;
+    sched->callback(task->tids.id, result);
+    sched_send_result_and_free(sched, task->tids.next, result);
+    task->tids.next = NULL;
 
-        struct ht_item* ht_item = htable_get(&sched->ht, task->hash);
-        assert(ht_item);
-        ht_item->value = result->result;
-        task->done = 1;
-        if (task->pq_node != PQUEUE_NOT_A_NODE)
-            pqueue_remove(&sched->pq, task->pq_node);
-    }
+    struct ht_item* ht_item = htable_get(&sched->ht, task->hash);
+    assert(ht_item);
+    ht_item->value = result;
+    task->done = 1;
+    if (task->pq_node != PQUEUE_NOT_A_NODE)
+        pqueue_remove(&sched->pq, task->pq_node);
 
     pthread_mutex_unlock(&sched->mtx);
 }
 
-// Return whether abort signal was caught.
+// Gets a task for a worker (the caller) to work on. Function is blocking.
+// Returns whether an abort signal was caught.
 static int sched_get_task(struct scheduler* sched, struct task_slice* task_slice)
 {
     pthread_mutex_lock(&sched->mtx);
@@ -147,7 +147,7 @@ static int sched_get_task(struct scheduler* sched, struct task_slice* task_slice
     return abort;
 }
 
-static void sched_thread_loop(struct scheduler* sched)
+static void sched_worker_loop(struct scheduler* sched)
 {
     while (1) {
         struct task_slice task_slice;
@@ -160,14 +160,15 @@ static void sched_thread_loop(struct scheduler* sched)
 #else
         reverse_hash_openssl(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
 #endif
-        sched_finalise_task(sched, task_slice.task, &result);
+        if (result.success)
+            sched_finalise_task(sched, task_slice.task, result.result);
     }
 }
 
 static void* sched_init_thread(void* message)
 {
     struct scheduler* sched = (struct scheduler*)message;
-    sched_thread_loop(sched);
+    sched_worker_loop(sched);
     return NULL;
 }
 

@@ -147,7 +147,7 @@ void pqueue_remove(struct pqueue* pq, pq_node_t k)
     }
 }
 
-int pqueue_empty(struct pqueue* pq)
+int pqueue_is_empty(struct pqueue* pq)
 {
     return pq->size == 0;
 }

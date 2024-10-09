@@ -102,7 +102,7 @@ static void server_loop(struct server* serv)
 #endif
 
 #ifdef SB_USE_SIMD
-        hash_prepare(target_hash);
+        hash_prepare_for_simd(target_hash);
 #endif
 
         sched_add_task(&serv->sched, client_socket_fd, target_hash, start, end, priority - 1);
@@ -118,6 +118,7 @@ void open_server(uint32_t port, int reuse)
 
     printf("Opening server...\n");
 
+    // Set SIGINT handler so we can close the server gracefully.
     signal(SIGINT, sigint_handler);
 
     struct server serv;

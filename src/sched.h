@@ -7,8 +7,8 @@
 #include "pqueue.h"
 #include "sha256.h"
 
+// Task ID (requests) linked list
 struct tid_list;
-
 struct tid_list
 {
     int id;

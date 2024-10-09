@@ -13,16 +13,6 @@ void sha256_simd(uint64_t input[VEC_SIZE], vec_t hash[OUTPUT_VECS]);
 
 void hash_to_str(char* str, uint8_t hash[SHA256_LEN]);
 
-static inline int hash_equals(uint8_t first[SHA256_LEN], uint8_t second[SHA256_LEN])
-{
-    uint64_t* f64 = (uint64_t*)first;
-    uint64_t* s64 = (uint64_t*)second;
-    return f64[0] == s64[0] &&
-           f64[1] == s64[1] &&
-           f64[2] == s64[2] &&
-           f64[3] == s64[3];
-}
-
-void hash_prepare(uint8_t hash[SHA256_LEN]);
+void hash_prepare_for_simd(uint8_t hash[SHA256_LEN]);
 
 #endif
