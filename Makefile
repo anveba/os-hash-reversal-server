@@ -1,7 +1,7 @@
 CC := gcc
-FLAGS := -DSB_VERBOSE -Wall -march=native -std=gnu11
+FLAGS := -DSB_VERBOSE -DSB_USE_SIMD -Wall -march=native -std=gnu11
 DEBUG_FLAGS = -p -g3
-RELEASE_FLAGS = -O3 -flto -DNDEBUG
+RELEASE_FLAGS = -O3 -funroll-loops -flto -DNDEBUG
 INCLUDE := -Isrc -Ivendor
 LINK := -lpthread  -lcrypto -lssl
 
@@ -28,11 +28,11 @@ makedir:
 
 .PHONY: all
 all: 
-	$(CC) -o $(TARGET) $(SRC) $(CCFLAGS) $(LINK) $(RELEASE_FLAGS)
+	$(CC) -o $(TARGET) $(SRC) $(RELEASE_FLAGS) $(CCFLAGS) $(LINK)
 
 .PHONY: debug
 debug: 
-	$(CC) -o $(TARGET) $(SRC) $(CCFLAGS) $(LINK) $(DEBUG_FLAGS)
+	$(CC) -o $(TARGET) $(SRC) $(DEBUG_FLAGS) $(CCFLAGS) $(LINK)
 
 .PHONY: clean
 clean:

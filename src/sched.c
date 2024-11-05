@@ -8,7 +8,7 @@
 
 #include "hreversal.h"
 
-#define COMPUTATION_UNIT 10000
+#define COMPUTATION_UNIT 100000
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -40,12 +40,12 @@ void sched_add_task(struct scheduler* sched,
     if (ht_item) {
         if (ht_item->task->done) {
 #ifdef SB_VERBOSE
-            printf("Hash table hit! Task previously done: sending response immediately\n");
+            printf("[HT hit] Previously completed\n");
 #endif
             sched->callback(task_id, ht_item->value);
         } else {
 #ifdef SB_VERBOSE
-            printf("Hash table hit! Task in progress: placing on response list.\n");
+            printf("[HT hit] Task in progress\n");
 #endif
             struct tid_list* tid = malloc(sizeof(struct tid_list));
             tid->id = task_id;
@@ -165,7 +165,7 @@ static void sched_worker_loop(struct scheduler* sched)
     }
 }
 
-static void* sched_init_thread(void* message)
+static void* sched_init_worker(void* message)
 {
     struct scheduler* sched = (struct scheduler*)message;
     sched_worker_loop(sched);
@@ -191,7 +191,7 @@ void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t))
     sched->callback = callback;
 
     for (int i = 0; i < sched->thread_count; i++)
-        pthread_create(sched->threads + i, NULL, sched_init_thread, sched);
+        pthread_create(sched->threads + i, NULL, sched_init_worker, sched);
 }
 
 static void task_free(struct task* task)
