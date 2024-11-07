@@ -8,7 +8,7 @@
 
 #include "hreversal.h"
 
-#define COMPUTATION_UNIT 100000
+#define COMPUTATION_UNIT 10000
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -155,11 +155,8 @@ static void sched_worker_loop(struct scheduler* sched)
             break;
 
         struct reversal_result result;
-#ifdef SB_USE_SIMD
-        reverse_hash_simd(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
-#else
-        reverse_hash_openssl(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
-#endif
+        reverse_hash(task_slice.task->hash, task_slice.start, task_slice.end, &task_slice.task->done, &result);
+
         if (result.success)
             sched_finalise_task(sched, task_slice.task, result.result);
     }

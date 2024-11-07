@@ -139,7 +139,7 @@ void pqueue_remove(struct pqueue* pq, pq_node_t k)
     assert(pqueue_is_node(pq, k));
     pq->items[k].task->pq_node = PQUEUE_NOT_A_NODE;
     pq->size--;
-    if (pq->size > 0) {
+    if (k <= pq->size) {
         pq->items[k] = pq->items[pq->size + 1];
         pq->items[k].task->pq_node = k;
         pqueue_bubble(pq, k);

@@ -101,8 +101,8 @@ static void server_loop(struct server* serv)
         printf("HASH  %s\nPRIOR %d\nSTART %ld\nEND   %ld\n", hash_str, priority, start, end);
 #endif
 
-#ifdef SB_USE_SIMD
-        hash_prepare_for_simd(target_hash);
+#ifdef SB_HASH_NEEDS_PREPROCESSING
+        hash_preprocess(target_hash);
 #endif
 
         sched_add_task(&serv->sched, client_socket_fd, target_hash, start, end, priority - 1);

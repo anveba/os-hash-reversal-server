@@ -3,13 +3,14 @@
 #include <assert.h>
 #include <endian.h>
 #include <memory.h>
-#include <openssl/sha.h>
 
-void reverse_hash_simd(uint8_t target_hash[SHA256_LEN],
-                       uint64_t start,
-                       uint64_t end,
-                       uint8_t* abort,
-                       struct reversal_result* result)
+#ifdef SB_VECTORIZE
+
+void reverse_hash(uint8_t target_hash[SHA256_LEN],
+                  uint64_t start,
+                  uint64_t end,
+                  uint8_t* abort,
+                  struct reversal_result* result)
 {
     // Prepare hash vectors for efficient comparison
     vec_t target_hash_vectors[OUTPUT_VECS];
@@ -24,6 +25,14 @@ void reverse_hash_simd(uint8_t target_hash[SHA256_LEN],
     else
         rounds = rounds / VEC_SIZE + 1;
 
+    // Prepare input
+    vec_t msg[MSG_SIZE];
+    sha256_init_msg(msg);
+
+    vec64_t input;
+    for (int i = 0; i < VEC_SIZE; i++)
+        input[i] = start + i;
+
     // Main bruteforce loop
     for (uint64_t i = 0; i < rounds; i++) {
 
@@ -31,11 +40,11 @@ void reverse_hash_simd(uint8_t target_hash[SHA256_LEN],
             break;
 
         vec_t candidate_hash[OUTPUT_VECS];
-        uint64_t le[VEC_SIZE];
-        for (int j = 0; j < VEC_SIZE; j++)
-            le[j] = htole64(start + i * VEC_SIZE + j);
+        input += VEC_SIZE;
 
-        sha256_simd(le, candidate_hash);
+        sha256_load_input(msg, &input);
+
+        sha256_vectorized(msg, candidate_hash);
 
         vec_t cmp_res = (candidate_hash[0] == target_hash_vectors[0]);
         for (int j = 1; j < OUTPUT_VECS; j++)
@@ -52,11 +61,13 @@ void reverse_hash_simd(uint8_t target_hash[SHA256_LEN],
     result->success = 0;
 }
 
-void reverse_hash_openssl(uint8_t target_hash[SHA256_LEN],
-                          uint64_t start,
-                          uint64_t end,
-                          uint8_t* abort,
-                          struct reversal_result* result)
+#else
+
+void reverse_hash(uint8_t target_hash[SHA256_LEN],
+                  uint64_t start,
+                  uint64_t end,
+                  uint8_t* abort,
+                  struct reversal_result* result)
 {
     for (uint64_t i = start; i < end; i++) {
 
@@ -66,10 +77,7 @@ void reverse_hash_openssl(uint8_t target_hash[SHA256_LEN],
         uint8_t candidate_hash[SHA256_LEN];
         uint64_t le = htole64(i);
 
-        SHA256_CTX ctx;
-        SHA256_Init(&ctx);
-        SHA256_Update(&ctx, &le, 8);
-        SHA256_Final(candidate_hash, &ctx);
+        SHA256_NO_VECTOR(le, candidate_hash);
 
         if (!memcmp(candidate_hash, target_hash, SHA256_LEN)) {
             result->success = 1;
@@ -79,3 +87,5 @@ void reverse_hash_openssl(uint8_t target_hash[SHA256_LEN],
     }
     result->success = 0;
 }
+
+#endif

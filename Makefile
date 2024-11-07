@@ -1,6 +1,6 @@
 CC := gcc
-FLAGS := -DSB_VERBOSE -DSB_USE_SIMD -Wall -march=native -std=gnu11
-DEBUG_FLAGS = -p -g3
+FLAGS := -DSB_VERBOSE -DSB_VECTORIZE -Wall -march=native -std=gnu11
+DEBUG_FLAGS = -p -g3 -Og
 RELEASE_FLAGS = -O3 -funroll-loops -flto -DNDEBUG
 INCLUDE := -Isrc -Ivendor
 LINK := -lpthread  -lcrypto -lssl

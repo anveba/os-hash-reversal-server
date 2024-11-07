@@ -9,16 +9,10 @@ struct reversal_result
     uint64_t result;
 };
 
-void reverse_hash_simd(uint8_t target_hash[SHA256_LEN],
-                       uint64_t start,
-                       uint64_t end,
-                       uint8_t* abort,
-                       struct reversal_result* result);
-
-void reverse_hash_openssl(uint8_t target_hash[SHA256_LEN],
-                          uint64_t start,
-                          uint64_t end,
-                          uint8_t* abort,
-                          struct reversal_result* result);
+void reverse_hash(uint8_t target_hash[SHA256_LEN],
+                  uint64_t start,
+                  uint64_t end,
+                  uint8_t* abort,
+                  struct reversal_result* result);
 
 #endif
