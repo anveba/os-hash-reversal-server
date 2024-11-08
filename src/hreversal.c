@@ -77,7 +77,7 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
         uint8_t candidate_hash[SHA256_LEN];
         uint64_t le = htole64(i);
 
-        SHA256_NO_VECTOR(le, candidate_hash);
+        sha256_openssl(le, candidate_hash);
 
         if (!memcmp(candidate_hash, target_hash, SHA256_LEN)) {
             result->success = 1;

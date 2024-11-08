@@ -19,8 +19,6 @@ void sha256_init_msg(vec_t msg[MSG_SIZE]);
 
 void sha256_load_input(vec_t msg[MSG_SIZE], const vec64_t* input);
 
-void sha256_x86_64(uint64_t input, uint8_t hash[SHA256_LEN]);
-
 void sha256_openssl(uint64_t input, uint8_t hash[SHA256_LEN]);
 
 void hash_to_str(char* str, uint8_t hash[SHA256_LEN]);
@@ -30,8 +28,6 @@ void hash_preprocess(uint8_t hash[SHA256_LEN]);
 #if SB_VECTORIZE
 #define SB_SHA256_VECTORIZED
 #define SB_HASH_NEEDS_PREPROCESSING
-#else
-#define SHA256_NO_VECTOR sha256_openssl
 #endif
 
 #endif
