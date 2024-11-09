@@ -36,7 +36,7 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
     // Main bruteforce loop
     for (uint64_t i = 0; i < rounds; i++) {
 
-        if (*abort)
+        if ((i & 7) == 0 && *abort)
             break;
 
         vec_t candidate_hash[OUTPUT_VECS];
@@ -71,7 +71,7 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
 {
     for (uint64_t i = start; i < end; i++) {
 
-        if (*abort)
+        if ((i & 7) == 0 && *abort)
             break;
 
         uint8_t candidate_hash[SHA256_LEN];
