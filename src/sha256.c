@@ -81,8 +81,8 @@ static const uint32_t k[64] = {
 // SHA256 hashing function optimised for a 64-bit input size and uses SIMD.
 // Specialised SHA256 SIMD instructions exist on some architectures, but not
 // all, so this implementation does not use them. This function does not
-// compute the final bit of the SHA256 hash, as this is reversable.
-void sha256_vectorized(const vec_t initials[MSG_SIZE], vec_t hash[OUTPUT_VECS])
+// compute the final part of the SHA256 hash, as this is reversable.
+void sha256_vectorized(const vec_t initial_msg[MSG_SIZE], vec_t hash[OUTPUT_VECS])
 {
     const uint32_t hs[8] = { 0x6a09e667,
                              0xbb67ae85,
@@ -95,9 +95,10 @@ void sha256_vectorized(const vec_t initials[MSG_SIZE], vec_t hash[OUTPUT_VECS])
 
     // Prepare first 512-bit chunk with proper endianness
     vec_t msg[MSG_SIZE];
-    memcpy(msg, initials, sizeof(msg));
+    memcpy(msg, initial_msg, sizeof(msg));
 
     // Prepare the initial state
+#pragma GCC unroll 128
     for (int i = 0; i < VEC_SIZE; i++) {
         hash[0][i] = hs[0];
         hash[1][i] = hs[1];
@@ -109,33 +110,39 @@ void sha256_vectorized(const vec_t initials[MSG_SIZE], vec_t hash[OUTPUT_VECS])
         hash[7][i] = hs[7];
     }
 
-    // Main loop
-    for (int i = 0; i < 64; i++) {
-        if (i >= MSG_SIZE) {
-            vec_t s0 = RROT(msg[(i + 1) % MSG_SIZE], 7) ^ RROT(msg[(i + 1) % MSG_SIZE], 18) ^ (msg[(i + 1) % MSG_SIZE] >> 3);
-            vec_t s1 = RROT(msg[(i + 14) % MSG_SIZE], 17) ^ RROT(msg[(i + 14) % MSG_SIZE], 19) ^ (msg[(i + 14) % MSG_SIZE] >> 10);
-            msg[i % MSG_SIZE] = msg[i % MSG_SIZE] + s0 + msg[(i + 9) % MSG_SIZE] + s1;
-        }
-
-        vec_t s1 = RROT(hash[4], 6) ^ RROT(hash[4], 11) ^ RROT(hash[4], 25);
-        vec_t ch = (hash[4] & hash[5]) ^ ((~hash[4]) & hash[6]);
-        vec_t temp1 = hash[7] + s1 + ch + k[i] + msg[i % MSG_SIZE];
-        vec_t s0 = RROT(hash[0], 2) ^ RROT(hash[0], 13) ^ RROT(hash[0], 22);
-        vec_t maj = (hash[0] & hash[1]) ^ (hash[0] & hash[2]) ^ (hash[1] & hash[2]);
+// Main loops
+#pragma GCC unroll 16
+    for (int i = 0; i < 16; i++) {
+        vec_t s1 = RROT(hash[(4 + 7 * i) % 8], 6) ^ RROT(hash[(4 + 7 * i) % 8], 11) ^ RROT(hash[(4 + 7 * i) % 8], 25);
+        vec_t ch = (hash[(4 + 7 * i) % 8] & hash[(5 + 7 * i) % 8]) ^ ((~hash[(4 + 7 * i) % 8]) & hash[(6 + 7 * i) % 8]);
+        vec_t temp1 = hash[(7 + 7 * i) % 8] + s1 + ch + k[i] + msg[i % MSG_SIZE];
+        vec_t s0 = RROT(hash[(0 + 7 * i) % 8], 2) ^ RROT(hash[(0 + 7 * i) % 8], 13) ^ RROT(hash[(0 + 7 * i) % 8], 22);
+        vec_t maj = (hash[(0 + 7 * i) % 8] & hash[(1 + 7 * i) % 8]) ^ (hash[(0 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]) ^ (hash[(1 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]);
         vec_t temp2 = s0 + maj;
-        hash[7] = hash[6];
-        hash[6] = hash[5];
-        hash[5] = hash[4];
-        hash[4] = hash[3] + temp1;
-        hash[3] = hash[2];
-        hash[2] = hash[1];
-        hash[1] = hash[0];
-        hash[0] = temp1 + temp2;
+        hash[(3 + 7 * i) % 8] = hash[(3 + 7 * i) % 8] + temp1;
+        hash[(7 + 7 * i) % 8] = temp1 + temp2;
+    }
+
+#pragma GCC unroll 48
+    for (int i = 16; i < 64; i++) {
+        vec_t s0 = RROT(msg[(i + 1) % MSG_SIZE], 7) ^ RROT(msg[(i + 1) % MSG_SIZE], 18) ^ (msg[(i + 1) % MSG_SIZE] >> 3);
+        vec_t s1 = RROT(msg[(i + 14) % MSG_SIZE], 17) ^ RROT(msg[(i + 14) % MSG_SIZE], 19) ^ (msg[(i + 14) % MSG_SIZE] >> 10);
+        msg[i % MSG_SIZE] = msg[i % MSG_SIZE] + s0 + msg[(i + 9) % MSG_SIZE] + s1;
+
+        s1 = RROT(hash[(4 + 7 * i) % 8], 6) ^ RROT(hash[(4 + 7 * i) % 8], 11) ^ RROT(hash[(4 + 7 * i) % 8], 25);
+        vec_t ch = (hash[(4 + 7 * i) % 8] & hash[(5 + 7 * i) % 8]) ^ ((~hash[(4 + 7 * i) % 8]) & hash[(6 + 7 * i) % 8]);
+        vec_t temp1 = hash[(7 + 7 * i) % 8] + s1 + ch + k[i] + msg[i % MSG_SIZE];
+        s0 = RROT(hash[(0 + 7 * i) % 8], 2) ^ RROT(hash[(0 + 7 * i) % 8], 13) ^ RROT(hash[(0 + 7 * i) % 8], 22);
+        vec_t maj = (hash[(0 + 7 * i) % 8] & hash[(1 + 7 * i) % 8]) ^ (hash[(0 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]) ^ (hash[(1 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]);
+        vec_t temp2 = s0 + maj;
+        hash[(3 + 7 * i) % 8] = hash[(3 + 7 * i) % 8] + temp1;
+        hash[(7 + 7 * i) % 8] = temp1 + temp2;
     }
 }
 
 void sha256_init_msg(vec_t msg[MSG_SIZE])
 {
+#pragma GCC unroll 128
     for (int i = 0; i < VEC_SIZE; i++) {
         msg[2][i] = 0x80000000;
         for (int j = 3; j < 15; j++)
@@ -146,6 +153,7 @@ void sha256_init_msg(vec_t msg[MSG_SIZE])
 
 void sha256_load_input(vec_t msg[MSG_SIZE], const vec64_t* input)
 {
+#pragma GCC unroll 128
     for (int i = 0; i < VEC_SIZE; i++) {
         uint64_t le_input = htole64(((*input)[i]));
         uint32_t lower, upper;

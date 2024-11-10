@@ -39,17 +39,17 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
         if ((i & 7) == 0 && *abort)
             break;
 
-        vec_t candidate_hash[OUTPUT_VECS];
-        input += VEC_SIZE;
-
         sha256_load_input(msg, &input);
 
+        vec_t candidate_hash[OUTPUT_VECS];
         sha256_vectorized(msg, candidate_hash);
 
         vec_t cmp_res = (candidate_hash[0] == target_hash_vectors[0]);
+#pragma GCC unroll 128
         for (int j = 1; j < OUTPUT_VECS; j++)
             cmp_res = (cmp_res & (candidate_hash[j] == target_hash_vectors[j]));
 
+#pragma GCC unroll 128
         for (int j = 0; j < VEC_SIZE; j++) {
             if (cmp_res[j]) {
                 result->success = 1;
@@ -57,6 +57,7 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
                 return;
             }
         }
+        input += VEC_SIZE;
     }
     result->success = 0;
 }

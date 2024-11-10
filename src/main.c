@@ -13,7 +13,7 @@ int main(int argc, char** argv)
         char* endptr;
         uint32_t port = strtol(argv[1], &endptr, 10);
         if (argv[1] == endptr) {
-            printf("Argument not a number.\n");
+            printf("Argument is not a number.\n");
             return 1;
         }
         open_server(port, 0);
