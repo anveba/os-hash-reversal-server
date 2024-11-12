@@ -113,14 +113,20 @@ void sha256_vectorized(const vec_t initial_msg[MSG_SIZE], vec_t hash[OUTPUT_VECS
 // Main loops
 #pragma GCC unroll 16
     for (int i = 0; i < 16; i++) {
-        vec_t s1 = RROT(hash[(4 + 7 * i) % 8], 6) ^ RROT(hash[(4 + 7 * i) % 8], 11) ^ RROT(hash[(4 + 7 * i) % 8], 25);
-        vec_t ch = (hash[(4 + 7 * i) % 8] & hash[(5 + 7 * i) % 8]) ^ ((~hash[(4 + 7 * i) % 8]) & hash[(6 + 7 * i) % 8]);
-        vec_t temp1 = hash[(7 + 7 * i) % 8] + s1 + ch + k[i] + msg[i % MSG_SIZE];
-        vec_t s0 = RROT(hash[(0 + 7 * i) % 8], 2) ^ RROT(hash[(0 + 7 * i) % 8], 13) ^ RROT(hash[(0 + 7 * i) % 8], 22);
-        vec_t maj = (hash[(0 + 7 * i) % 8] & hash[(1 + 7 * i) % 8]) ^ (hash[(0 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]) ^ (hash[(1 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]);
+        vec_t s1 = RROT(hash[4], 6) ^ RROT(hash[4], 11) ^ RROT(hash[4], 25);
+        vec_t ch = (hash[4] & hash[5]) ^ ((~hash[4]) & hash[6]);
+        vec_t temp1 = hash[7] + s1 + ch + k[i] + msg[i % MSG_SIZE];
+        vec_t s0 = RROT(hash[0], 2) ^ RROT(hash[0], 13) ^ RROT(hash[0], 22);
+        vec_t maj = (hash[0] & hash[1]) ^ (hash[0] & hash[2]) ^ (hash[1] & hash[2]);
         vec_t temp2 = s0 + maj;
-        hash[(3 + 7 * i) % 8] = hash[(3 + 7 * i) % 8] + temp1;
-        hash[(7 + 7 * i) % 8] = temp1 + temp2;
+        hash[7] = hash[6];
+        hash[6] = hash[5];
+        hash[5] = hash[4];
+        hash[4] = hash[3] + temp1;
+        hash[3] = hash[2];
+        hash[2] = hash[1];
+        hash[1] = hash[0];
+        hash[0] = temp1 + temp2;
     }
 
 #pragma GCC unroll 48
@@ -129,14 +135,20 @@ void sha256_vectorized(const vec_t initial_msg[MSG_SIZE], vec_t hash[OUTPUT_VECS
         vec_t s1 = RROT(msg[(i + 14) % MSG_SIZE], 17) ^ RROT(msg[(i + 14) % MSG_SIZE], 19) ^ (msg[(i + 14) % MSG_SIZE] >> 10);
         msg[i % MSG_SIZE] = msg[i % MSG_SIZE] + s0 + msg[(i + 9) % MSG_SIZE] + s1;
 
-        s1 = RROT(hash[(4 + 7 * i) % 8], 6) ^ RROT(hash[(4 + 7 * i) % 8], 11) ^ RROT(hash[(4 + 7 * i) % 8], 25);
-        vec_t ch = (hash[(4 + 7 * i) % 8] & hash[(5 + 7 * i) % 8]) ^ ((~hash[(4 + 7 * i) % 8]) & hash[(6 + 7 * i) % 8]);
-        vec_t temp1 = hash[(7 + 7 * i) % 8] + s1 + ch + k[i] + msg[i % MSG_SIZE];
-        s0 = RROT(hash[(0 + 7 * i) % 8], 2) ^ RROT(hash[(0 + 7 * i) % 8], 13) ^ RROT(hash[(0 + 7 * i) % 8], 22);
-        vec_t maj = (hash[(0 + 7 * i) % 8] & hash[(1 + 7 * i) % 8]) ^ (hash[(0 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]) ^ (hash[(1 + 7 * i) % 8] & hash[(2 + 7 * i) % 8]);
+        s1 = RROT(hash[4], 6) ^ RROT(hash[4], 11) ^ RROT(hash[4], 25);
+        vec_t ch = (hash[4] & hash[5]) ^ ((~hash[4]) & hash[6]);
+        vec_t temp1 = hash[7] + s1 + ch + k[i] + msg[i % MSG_SIZE];
+        s0 = RROT(hash[0], 2) ^ RROT(hash[0], 13) ^ RROT(hash[0], 22);
+        vec_t maj = (hash[0] & hash[1]) ^ (hash[0] & hash[2]) ^ (hash[1] & hash[2]);
         vec_t temp2 = s0 + maj;
-        hash[(3 + 7 * i) % 8] = hash[(3 + 7 * i) % 8] + temp1;
-        hash[(7 + 7 * i) % 8] = temp1 + temp2;
+        hash[7] = hash[6];
+        hash[6] = hash[5];
+        hash[5] = hash[4];
+        hash[4] = hash[3] + temp1;
+        hash[3] = hash[2];
+        hash[2] = hash[1];
+        hash[1] = hash[0];
+        hash[0] = temp1 + temp2;
     }
 }
 
