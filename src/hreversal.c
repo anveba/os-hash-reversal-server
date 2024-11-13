@@ -36,7 +36,7 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
     // Main bruteforce loop
     for (uint64_t i = 0; i < rounds; i++) {
 
-        if ((i & 7) == 0 && *abort)
+        if ((i & 15) == 0 && *abort)
             break;
 
         sha256_load_input(msg, &input);
