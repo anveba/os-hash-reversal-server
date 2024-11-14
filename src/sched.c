@@ -23,7 +23,8 @@ static uint64_t task_key(struct task* task)
 {
     uint64_t total_priority = 0;
     for (struct tid_list* tid = &task->tids; tid != NULL; tid = tid->next)
-        total_priority += tid->priority + 1;
+        total_priority += tid->priority;
+    assert(total_priority > 0);
     return (task->end - task->progress) / total_priority;
 }
 
@@ -34,6 +35,9 @@ void sched_add_task(struct scheduler* sched,
                     uint64_t end,
                     uint8_t priority)
 {
+    assert(end > start);
+    assert(priority > 0);
+
     pthread_mutex_lock(&sched->mtx);
 
     struct ht_item* ht_item = htable_get(&sched->ht, target_hash);
@@ -52,6 +56,8 @@ void sched_add_task(struct scheduler* sched,
             tid->priority = priority;
             tid->next = ht_item->task->tids.next;
             ht_item->task->tids.next = tid;
+
+            // Update queue position. If all remaining slices are in progress, the task might not be in the queue
             if (ht_item->task->pq_node != PQUEUE_NOT_A_NODE)
                 pqueue_decrease(&sched->pq, ht_item->task->pq_node, task_key(ht_item->task));
         }

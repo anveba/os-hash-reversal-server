@@ -47,6 +47,7 @@ void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t));
 
 void sched_destroy(struct scheduler* sched);
 
+// Priorities should be larger than zero.
 void sched_add_task(struct scheduler* sched,
                     int task_id,
                     uint8_t target_hash[SHA256_LEN],
