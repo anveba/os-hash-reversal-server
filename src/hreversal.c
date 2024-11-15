@@ -36,20 +36,19 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
     // Main bruteforce loop
     for (uint64_t i = 0; i < rounds; i++) {
 
-        if ((i & 15) == 0 && *abort)
-            break;
-
         sha256_load_input(msg, &input);
 
         vec_t candidate_hash[OUTPUT_VECS];
         sha256_vectorized(msg, candidate_hash);
+
+        if ((i & 15) == 0 && *abort)
+            break;
 
         vec_t cmp_res = (candidate_hash[0] == target_hash_vectors[0]);
 #pragma GCC unroll 128
         for (int j = 1; j < OUTPUT_VECS; j++)
             cmp_res = (cmp_res & (candidate_hash[j] == target_hash_vectors[j]));
 
-#pragma GCC unroll 128
         for (int j = 0; j < VEC_SIZE; j++) {
             if (cmp_res[j]) {
                 result->success = 1;

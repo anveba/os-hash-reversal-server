@@ -8,7 +8,7 @@
 
 #include "hreversal.h"
 
-#define COMPUTATION_UNIT 40000
+#define COMPUTATION_UNIT 320
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -61,6 +61,7 @@ void sched_add_task(struct scheduler* sched,
             if (ht_item->task->pq_node != PQUEUE_NOT_A_NODE)
                 pqueue_decrease(&sched->pq, ht_item->task->pq_node, task_key(ht_item->task));
         }
+        pthread_mutex_unlock(&sched->mtx);
     } else {
         struct task* task = (struct task*)malloc(sizeof(struct task));
         memcpy(task->hash, target_hash, SHA256_LEN);
@@ -76,10 +77,9 @@ void sched_add_task(struct scheduler* sched,
         pqueue_insert(&sched->pq, task_key(task), task);
         htable_add(&sched->ht, task);
 
+        pthread_mutex_unlock(&sched->mtx);
         pthread_cond_broadcast(&sched->wait_cond);
     }
-
-    pthread_mutex_unlock(&sched->mtx);
 }
 
 static void sched_send_result_and_free(struct scheduler* sched, struct tid_list* tid, uint64_t result)
@@ -182,7 +182,7 @@ void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t))
     printf("Found %d CPUs.\n", cpu_count);
 #endif
 
-    sched->thread_count = cpu_count * 2 + 1;
+    sched->thread_count = cpu_count + 2;
     sched->threads = malloc(sizeof(pthread_t) * sched->thread_count);
     pthread_mutex_init(&sched->mtx, NULL);
     pthread_cond_init(&sched->wait_cond, NULL);
@@ -193,8 +193,12 @@ void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t))
 
     sched->callback = callback;
 
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 65536);
+
     for (int i = 0; i < sched->thread_count; i++)
-        pthread_create(sched->threads + i, NULL, sched_init_worker, sched);
+        pthread_create(sched->threads + i, &attr, sched_init_worker, sched);
 }
 
 static void task_free(struct task* task)

@@ -154,7 +154,6 @@ void sha256_vectorized(const vec_t initial_msg[MSG_SIZE], vec_t hash[OUTPUT_VECS
 
 void sha256_init_msg(vec_t msg[MSG_SIZE])
 {
-#pragma GCC unroll 128
     for (int i = 0; i < VEC_SIZE; i++) {
         msg[2][i] = 0x80000000;
         for (int j = 3; j < 15; j++)
@@ -165,7 +164,6 @@ void sha256_init_msg(vec_t msg[MSG_SIZE])
 
 void sha256_load_input(vec_t msg[MSG_SIZE], const vec64_t* input)
 {
-#pragma GCC unroll 128
     for (int i = 0; i < VEC_SIZE; i++) {
         uint64_t le_input = htole64(((*input)[i]));
         uint32_t lower, upper;
