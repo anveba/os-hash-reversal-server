@@ -18,7 +18,7 @@
 #define PACKET_REQUEST_END_OFFSET (SHA256_LEN + 8)
 #define PACKET_REQUEST_PRIO_OFFSET (SHA256_LEN + 8 + 8)
 
-#define QUEUE_SIZE 10
+#define QUEUE_SIZE 25
 
 struct server
 {

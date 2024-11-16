@@ -41,7 +41,7 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
         vec_t candidate_hash[OUTPUT_VECS];
         sha256_vectorized(msg, candidate_hash);
 
-        if ((i & 15) == 0 && *abort)
+        if ((i & 7) == 0 && *abort)
             break;
 
         vec_t cmp_res = (candidate_hash[0] == target_hash_vectors[0]);

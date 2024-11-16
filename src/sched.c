@@ -8,7 +8,7 @@
 
 #include "hreversal.h"
 
-#define COMPUTATION_UNIT 320
+#define COMPUTATION_UNIT 3200
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -182,7 +182,7 @@ void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t))
     printf("Found %d CPUs.\n", cpu_count);
 #endif
 
-    sched->thread_count = cpu_count + 2;
+    sched->thread_count = cpu_count * 2;
     sched->threads = malloc(sizeof(pthread_t) * sched->thread_count);
     pthread_mutex_init(&sched->mtx, NULL);
     pthread_cond_init(&sched->wait_cond, NULL);
