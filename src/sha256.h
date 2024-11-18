@@ -8,7 +8,7 @@
 #define MSG_SIZE 16
 
 // Change this as needed
-#define VEC_SIZE 8
+#define VEC_SIZE 4
 
 typedef uint32_t vec_t __attribute__((vector_size(VEC_SIZE * sizeof(uint32_t))));
 typedef uint64_t vec64_t __attribute__((vector_size(VEC_SIZE * sizeof(uint64_t))));
