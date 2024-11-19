@@ -18,4 +18,5 @@ int main(int argc, char** argv)
         }
         open_server(port, 0);
     }
+    return 0;
 }

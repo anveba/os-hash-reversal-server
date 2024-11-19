@@ -9,6 +9,8 @@
 // Reference: https://en.wikipedia.org/wiki/SHA-2
 //            https://gcc.gnu.org/onlinedocs/gcc/Vector-Extensions.html
 
+#define RROT(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
 static const uint32_t k[64] = {
     0x428a2f98,
     0x71374491,
@@ -76,7 +78,14 @@ static const uint32_t k[64] = {
     0xc67178f2
 };
 
-#define RROT(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+const uint32_t hs[8] = { 0x6a09e667,
+                         0xbb67ae85,
+                         0x3c6ef372,
+                         0xa54ff53a,
+                         0x510e527f,
+                         0x9b05688c,
+                         0x1f83d9ab,
+                         0x5be0cd19 };
 
 // SHA256 hashing function optimised for a 64-bit input size and uses SIMD.
 // Specialised SHA256 SIMD instructions exist on some architectures, but not
@@ -84,15 +93,6 @@ static const uint32_t k[64] = {
 // compute the final part of the SHA256 hash, as this is reversable.
 void sha256_vectorized(const vec_t initial_msg[MSG_SIZE], vec_t hash[OUTPUT_VECS])
 {
-    const uint32_t hs[8] = { 0x6a09e667,
-                             0xbb67ae85,
-                             0x3c6ef372,
-                             0xa54ff53a,
-                             0x510e527f,
-                             0x9b05688c,
-                             0x1f83d9ab,
-                             0x5be0cd19 };
-
     // Prepare first 512-bit chunk with proper endianness
     vec_t msg[MSG_SIZE];
     memcpy(msg, initial_msg, sizeof(msg));
@@ -177,14 +177,14 @@ void sha256_load_input(vec_t msg[MSG_SIZE], const vec64_t* input)
 void hash_preprocess(uint8_t hash[SHA256_LEN])
 {
     uint32_t* h32 = (uint32_t*)hash;
-    h32[0] = be32toh(h32[0]) - 0x6a09e667;
-    h32[1] = be32toh(h32[1]) - 0xbb67ae85;
-    h32[2] = be32toh(h32[2]) - 0x3c6ef372;
-    h32[3] = be32toh(h32[3]) - 0xa54ff53a;
-    h32[4] = be32toh(h32[4]) - 0x510e527f;
-    h32[5] = be32toh(h32[5]) - 0x9b05688c;
-    h32[6] = be32toh(h32[6]) - 0x1f83d9ab;
-    h32[7] = be32toh(h32[7]) - 0x5be0cd19;
+    h32[0] = be32toh(h32[0]) - hs[0];
+    h32[1] = be32toh(h32[1]) - hs[1];
+    h32[2] = be32toh(h32[2]) - hs[2];
+    h32[3] = be32toh(h32[3]) - hs[3];
+    h32[4] = be32toh(h32[4]) - hs[4];
+    h32[5] = be32toh(h32[5]) - hs[5];
+    h32[6] = be32toh(h32[6]) - hs[6];
+    h32[7] = be32toh(h32[7]) - hs[7];
 }
 
 void hash_to_str(char* str, uint8_t hash[SHA256_LEN])
@@ -193,6 +193,8 @@ void hash_to_str(char* str, uint8_t hash[SHA256_LEN])
         sprintf(str + i * 2, "%02x", hash[i]);
 }
 
+#if !SB_VECTORIZE && !SB_USE_x86_64_SHA_SIMD && !SB_USE_NAIVE_SHA
+
 void sha256_openssl(uint64_t input, uint8_t hash[SHA256_LEN])
 {
     SHA256_CTX ctx;
@@ -200,3 +202,138 @@ void sha256_openssl(uint64_t input, uint8_t hash[SHA256_LEN])
     SHA256_Update(&ctx, &input, 8);
     SHA256_Final(hash, &ctx);
 }
+
+#endif
+
+#if SB_USE_x86_64_SHA_SIMD
+// Reference: https://en.wikipedia.org/wiki/SHA-2
+//            https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html#text=sha2
+
+// SHA256 hashing function optimised for a 64-bit input size and uses SIMD.
+// Relies heavily on loop unrolling. Uses SHA256 SIMD instructions that may
+// or may not be present ¯\_(ツ)_/¯.
+void sha256_x86_64(uint64_t input, uint8_t hash[SHA256_LEN])
+{
+    // Prepare input digest
+    uint8_t w[64];
+    memcpy(w, &input, 8);
+    w[8] = 0x80;
+    memset(w + 9, 0, 47);
+    uint64_t sz = htobe64(sizeof(uint64_t) * 8);
+    memcpy(w + 56, &sz, 8);
+
+    // Prepare start state
+    __m128i s0 = _mm_set_epi32(hs[0], hs[1], hs[4], hs[5]); // a b e f
+    __m128i s1 = _mm_set_epi32(hs[2], hs[3], hs[6], hs[7]); // c d g h
+
+    __m128i msg[4];
+
+    // The first rounds are slightly different and it doesn't seem like the compiler is smart
+    // enough to optimise it properly if they are put in the next loop with extra if-statements.
+#pragma GCC unroll 4
+    for (int i = 0; i < 4; i++) {
+        msg[i] = _mm_shuffle_epi8(
+            _mm_loadu_si128((__m128i*)(w + i * 16)),
+            _mm_set_epi32(0x0c0d0e0f, 0x08090a0b, 0x04050607, 0x00010203));
+        if (i == 3)
+            msg[0] = _mm_sha256msg2_epu32(_mm_add_epi32(msg[0], _mm_alignr_epi8(msg[3], msg[2], 4)), msg[3]);
+        if (i != 0)
+            msg[i - 1] = _mm_sha256msg1_epu32(msg[i - 1], msg[i]);
+
+        __m128i ks = _mm_add_epi32(msg[i], _mm_set_epi32(k[3 + 4 * i], k[2 + 4 * i], k[1 + 4 * i], k[0 + 4 * i]));
+        s1 = _mm_sha256rnds2_epu32(s1, s0, ks);
+
+        ks = _mm_shuffle_epi32(ks, 0x0E);
+        s0 = _mm_sha256rnds2_epu32(s0, s1, ks);
+    }
+
+    // The 'main' loop for rounds 16 to 63
+#pragma GCC unroll 12
+    for (int i = 4; i < 16; i++) {
+        // These if statements aren't necessary, and the compiler is probably smart enough to do the
+        // optimisation that they try to achieve even if they aren't present.
+        if (i < 15) {
+            msg[(i + 1) % 4] = _mm_add_epi32(msg[(i + 1) % 4], _mm_alignr_epi8(msg[i % 4], msg[(i + 3) % 4], 4));
+            msg[(i + 1) % 4] = _mm_sha256msg2_epu32(msg[(i + 1) % 4], msg[i % 4]);
+        }
+        if (i < 13)
+            msg[(i + 3) % 4] = _mm_sha256msg1_epu32(msg[(i + 3) % 4], msg[i % 4]);
+
+        __m128i ks = _mm_add_epi32(msg[i % 4], _mm_set_epi32(k[3 + 4 * i], k[2 + 4 * i], k[1 + 4 * i], k[0 + 4 * i]));
+        s1 = _mm_sha256rnds2_epu32(s1, s0, ks);
+
+        ks = _mm_shuffle_epi32(ks, 0x0E);
+        s0 = _mm_sha256rnds2_epu32(s0, s1, ks);
+    }
+
+    // Shuffle the integers back
+    __m128i tmp1 = _mm_shuffle_epi32(s0, 0b00011011); // f e b a
+    __m128i tmp2 = _mm_shuffle_epi32(s1, 0b10110001); // d c h g
+    s0 = _mm_blend_epi16(tmp1, tmp2, 0b11110000);     // d c b a
+    s1 = _mm_alignr_epi8(tmp2, tmp1, 0b00001000);     // h g f e
+
+    // Store result
+    _mm_storeu_si128((__m128i*)&hash[0], s0);
+    _mm_storeu_si128((__m128i*)&hash[16], s1);
+}
+#endif
+
+#if SB_USE_NAIVE_SHA
+// Reference: https://en.wikipedia.org/wiki/SHA-2
+
+// Implementation based on the pseudo code on the Wikipedia page.
+void sha256_naive(uint64_t input, uint8_t hash[SHA256_LEN])
+{
+    // Prepare first 512-bit chunk with proper endianness
+    uint32_t w[64];
+    uint32_t lower, upper;
+    memcpy(&lower, &input, 4);
+    memcpy(&upper, ((char*)&input) + 4, 4);
+    w[0] = be32toh(lower);
+    w[1] = be32toh(upper);
+    w[2] = 0x80000000;
+    w[15] = sizeof(uint64_t) * 8;
+    for (int i = 3; i < 15; i++)
+        w[i] = 0;
+
+        // Fill the rest of the message schedule array (w)
+#pragma GCC unroll 48
+    for (int i = 16; i < 64; i++) {
+        uint32_t s0 = RROT(w[i - 15], 7) ^ RROT(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        uint32_t s1 = RROT(w[i - 2], 17) ^ RROT(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+
+    uint32_t a = hs[0], b = hs[1], c = hs[2], d = hs[3], e = hs[4], f = hs[5], g = hs[6], h = hs[7];
+
+    // Main loop
+#pragma GCC unroll 64
+    for (int i = 0; i < 64; i++) {
+        uint32_t s1 = RROT(e, 6) ^ RROT(e, 11) ^ RROT(e, 25);
+        uint32_t ch = (e & f) ^ ((~e) & g);
+        uint32_t temp1 = h + s1 + ch + k[i] + w[i];
+        uint32_t s0 = RROT(a, 2) ^ RROT(a, 13) ^ RROT(a, 22);
+        uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+        uint32_t temp2 = s0 + maj;
+        h = g;
+        g = f;
+        f = e;
+        e = d + temp1;
+        d = c;
+        c = b;
+        b = a;
+        a = temp1 + temp2;
+    }
+
+    // Complete final hash (with proper endianness)
+    ((uint32_t*)hash)[0] = a;
+    ((uint32_t*)hash)[1] = b;
+    ((uint32_t*)hash)[2] = c;
+    ((uint32_t*)hash)[3] = d;
+    ((uint32_t*)hash)[4] = e;
+    ((uint32_t*)hash)[5] = f;
+    ((uint32_t*)hash)[6] = g;
+    ((uint32_t*)hash)[7] = h;
+}
+
+#endif

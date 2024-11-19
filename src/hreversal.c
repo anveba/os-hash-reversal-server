@@ -4,7 +4,7 @@
 #include <endian.h>
 #include <memory.h>
 
-#ifdef SB_VECTORIZE
+#ifdef SB_SHA256_VECTORIZED
 
 void reverse_hash(uint8_t target_hash[SHA256_LEN],
                   uint64_t start,
@@ -44,6 +44,7 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
         if ((i & 7) == 0 && *abort)
             break;
 
+        // Compare against target
         vec_t cmp_res = (candidate_hash[0] == target_hash_vectors[0]);
 #pragma GCC unroll 128
         for (int j = 1; j < OUTPUT_VECS; j++)
@@ -77,7 +78,13 @@ void reverse_hash(uint8_t target_hash[SHA256_LEN],
         uint8_t candidate_hash[SHA256_LEN];
         uint64_t le = htole64(i);
 
+#if SB_USE_x86_64_SHA_SIMD
+        sha256_x86_64(le, candidate_hash);
+#elif SB_USE_NAIVE_SHA
+        sha256_naive(le, candidate_hash);
+#else
         sha256_openssl(le, candidate_hash);
+#endif
 
         if (!memcmp(candidate_hash, target_hash, SHA256_LEN)) {
             result->success = 1;

@@ -23,17 +23,17 @@ void pqueue_destroy(struct pqueue* pq)
     free(pq->items);
 }
 
-static pq_node_t right(size_t k)
+static pq_node_t right(pq_node_t k)
 {
     return k * 2 + 1;
 }
 
-static pq_node_t left(size_t k)
+static pq_node_t left(pq_node_t k)
 {
     return k * 2;
 }
 
-static pq_node_t parent(size_t k)
+static pq_node_t parent(pq_node_t k)
 {
     return k / 2;
 }

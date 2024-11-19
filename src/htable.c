@@ -5,7 +5,7 @@
 
 #include "sched.h"
 
-#define HTABLE_INITIAL_CAPACITY_POWER 1
+#define HTABLE_INITIAL_CAPACITY_POWER 4
 #define HTABLE_LOAD_FACTOR 0.5f
 
 void htable_init(struct htable* ht)

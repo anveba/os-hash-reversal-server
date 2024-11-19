@@ -19,14 +19,21 @@ void sha256_init_msg(vec_t msg[MSG_SIZE]);
 
 void sha256_load_input(vec_t msg[MSG_SIZE], const vec64_t* input);
 
+void sha256_x86_64(uint64_t input, uint8_t hash[SHA256_LEN]);
+
+void sha256_naive(uint64_t input, uint8_t hash[SHA256_LEN]);
+
 void sha256_openssl(uint64_t input, uint8_t hash[SHA256_LEN]);
 
 void hash_to_str(char* str, uint8_t hash[SHA256_LEN]);
 
 void hash_preprocess(uint8_t hash[SHA256_LEN]);
 
-#if SB_VECTORIZE
+#if SB_VECTORIZE && !SB_USE_x86_64_SHA_SIMD && !SB_USE_NAIVE_SHA
 #define SB_SHA256_VECTORIZED
+#endif
+
+#if SB_VECTORIZE || SB_USE_x86_64_SHA_SIMD || SB_USE_NAIVE_SHA
 #define SB_HASH_NEEDS_PREPROCESSING
 #endif
 
