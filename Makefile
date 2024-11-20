@@ -3,7 +3,7 @@ FLAGS := -DSB_VERBOSE -DSB_VECTORIZE -Wall -march=native -std=gnu11
 DEBUG_FLAGS = -p -g3 -Og
 RELEASE_FLAGS = -O3 -funroll-loops -flto -DNDEBUG
 INCLUDE := -Isrc -Ivendor
-LINK := -lpthread  -lcrypto -lssl
+LINK := -lpthread -lcrypto -lssl
 
 CCFLAGS := $(FLAGS) $(INCLUDE)
 LDFLAGS := $(FLAGS)
