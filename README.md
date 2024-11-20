@@ -16,7 +16,7 @@ Milestone is in git branch `milestone`. All experiments conducted by Andreas Bar
 
 It turns out mean turnaround time (accounting for priority) is what matters for the score, so a fair scheduling system is not actually desirable.
 
-Experiment is in git branch `scheduling`.
+Experiment is in git branch `scheduling` and `fair_scheduling`.
 
 ## Hash Table
 
