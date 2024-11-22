@@ -6,9 +6,6 @@
 #include <memory.h>
 #include <openssl/sha.h>
 
-// Reference: https://en.wikipedia.org/wiki/SHA-2
-//            https://gcc.gnu.org/onlinedocs/gcc/Vector-Extensions.html
-
 #define RROT(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 
 static const uint32_t k[64] = {
@@ -87,10 +84,13 @@ const uint32_t hs[8] = { 0x6a09e667,
                          0x1f83d9ab,
                          0x5be0cd19 };
 
+// Reference: https://en.wikipedia.org/wiki/SHA-2
+//            https://gcc.gnu.org/onlinedocs/gcc/Vector-Extensions.html
+
 // SHA256 hashing function optimised for a 64-bit input size and uses SIMD.
 // Specialised SHA256 SIMD instructions exist on some architectures, but not
 // all, so this implementation does not use them. This function does not
-// compute the final part of the SHA256 hash, as this is reversable.
+// compute the very final part of the SHA256 hash, as this is reversable.
 void sha256_vectorized(const vec_t initial_msg[MSG_SIZE], vec_t hash[OUTPUT_VECS])
 {
     // Prepare first 512-bit chunk with proper endianness

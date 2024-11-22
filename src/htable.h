@@ -19,6 +19,7 @@ struct htable
 {
     struct ht_item* items;
     size_t size, capacity_power;
+    // Hash table capacity is 2^capacity_power
 };
 
 void htable_init(struct htable* ht);

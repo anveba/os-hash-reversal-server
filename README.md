@@ -1,6 +1,6 @@
 # General
 
-Program created for DTU course 02159 Operating Systems. It currently has thread scheduling, hash table lookups for for previously-completed requests, and an SIMD-based implementation for SHA-256. 
+SHA-256 hash reversal server created for DTU course 02159 Operating Systems. It currently has thread scheduling, hash table lookups for previously-seen requests, and an SIMD-based implementation for SHA-256. 
 
 **Group members**: Andreas Barba (s214971)
 
@@ -32,15 +32,15 @@ An experiment's performance is evaluated by executing it five times and taking t
 **Motivation and Description**
 Brute-forcing SHA-256 hashes can be easily parallelized as each computation is isolated. And in almost all modern machines, there are several processors to take advantage of. Therefore, a parallel approach should introduce a performance increase.Furthermore, each request from the client has a priority. A task with a higher priority will have a higher penalty than a task with lower priority if they are delayed by the same amount. Therefore, a good scheduling system needs to be used in order to minimize the score. 
 
-Both of these issues involve managing the workload, so we therefore implemented them together. We first implemented a fair scheduling system based on the O(1) scheduler formerly used in the Linux kernel. This is a fair scheduler which works on a variety of different requests at the same time, but works more on tasks with higher priority. However, it turns out that mean turnaround time (accounting for priority) is what matters for the score, so a fair scheduling system is not actually desirable. We therefore implemented an unfair scheduler which simply focuses on only one task. The task focused on is the task with the smallest value of `computation_remaining / priority`, where `computation_remaining` is the number of unattempted inputs in the hash brute-forcing. With this metric, we account for the estimated time remaining for a task as well as the increased cost of tasks with high priority. This is implemented using a binary heap-based priority queue. 
-
-The schedulers use thread pool with each thread doing three things on repeat: 
+Both of these issues involve managing the workload, so we therefore implemented them together. We first implemented a scheduling system based on the O(1) scheduler formerly used in the Linux kernel. This is a fair scheduler which spreads out the processing resources on a variety of different requests at the same time, but works more on tasks with higher priority. However, it turns out that mean turnaround time (accounting for priority) is what matters for the score, so a fair scheduling system is not actually desirable. Therefore, we implemented an unfair scheduler which simply focuses on only one task at a time. The task focused on is the task with the smallest value of `computation_remaining / priority`, where `computation_remaining` is the remaining number of unattempted inputs in the hash brute-forcing procedure. With this metric, we account for the estimated time remaining for a task as well as the increased cost of tasks with higher priority. The data structure for getting the appropriate task is implemented using a binary heap-based priority queue. It takes O(1) time to get the task with smallest key and O(log(n)) time to insert and remove a task. The sceduler is essentially a thread pool. Each thread repeatedly works on a chunk associated with the task with the minimum key. Each thread does the following three things on repeat: 
   1. Get a task. Lock the scheduler and take a chunk of a task to work on.
-  2. Work. Begin brute-forcing hashing based on the inputs in the chunk to work on.
-  3. Finalise. If the brute-forcing was successful, lock the scheduler, remove the task from the scheduler, notify other worker than they can drop the task, send the result to the client, and clean up.
+  2. Work. Begin brute-forcing hashes based on the inputs in the chunk gotten in the previous step.
+  3. Finalise. If the brute-forcing was successful: lock the scheduler, remove the task from the scheduler, notify other workers than they can drop the task, send the result to the client, and clean up.
+
+The number of threads used is double the number of processors in the system. 
 
 **Setup**
-The experiment is containted in the git branches `scheduling` and `fair_scheduling`, and it is compared to the milestone version (in branch `milestone`). The client configuration is as noted above. The score decrease is calculated relative to the milestone version.
+The experiment code is containted in the git branches `scheduling` and `fair_scheduling`, and it is compared to the milestone version (in branch `milestone`). The relevant code is in `sched.c`. The client configuration is as noted above. The score decrease is calculated relative to the milestone version.
 
 **Results**
 | Seed     | Milestone  | Fair scheduling | Unfair scheduling |
@@ -54,17 +54,17 @@ The experiment is containted in the git branches `scheduling` and `fair_scheduli
 | Decrease | 1          | 28.82           | 101.23            |
 
 **Conculusion**
-We see that both scheduling versions yield an increase in performance, with the unfair scheduler being most performant. The execution environment had 16 cores, and since the computation is almost perfectly parallelizable, a performance increase of more than 16 times was expected. The unfair scheduling version was the version we continued with.
+We see that both scheduling versions yield an increase in performance, with the unfair scheduler being most performant. The execution environment had 16 cores, and since the computation is almost perfectly parallelizable, a performance increase of around 16 times was expected. We do indeed see a large performance increase. The unfair scheduling version was the version we continued with.
 
 ## Hash Table
 
 **Motivation and Description**
-If we store information about previous requests, we can skip the computation requests that have already been seen before. Motivated by these potential time savings, we implemented a lookup table using a hash table, with the key simply being the SHA-256 hash sent in the request. With the lookup table, when we recieve a request, we use the hash table to check if the request has been seen before. If we have a table miss, we place the request in the queue as normal. If we have a hit and the result is stored, we immediately respond to the request. If, instead, the result is not stored but is currently being computed or waiting to be computed, we can simply register the new request as also being interested in the pending result. When the computation is done, we send the result to all interested parties.
+If we store information about previous requests, we can skip the computation of requests that have already been seen before. Motivated by these potential time savings, we implemented a lookup table using a hash table, with the key simply being the SHA-256 hash sent in the request. With the lookup table, when we recieve a request, we use the hash table to check if the request has been seen before. If we have a table miss, we place the request in the scheduler's queue as normal. If we have a hit and the computation was completed, we immediately respond with the result to the request. If, instead, the result is not stored but is currently being computed or in queue, we can simply register the new request as also being interested in the pending result and update the internally used priority. When the computation is done, we send the result to all interested parties.
 
 This addition means that the scheduler needs to be slightly modified to account for every task waiting for a result. The scheduling metric used is simply modified to `computation_remaining / sum(priority)`.
 
 **Setup**
-The experiment is contained in git branch `lookup_table` and is compared to the version in the `scheduling` branch (the unfair scheduling version). The client configuration is as noted above. The score decrease is calculated relative to the unfair scheduling version.
+The experiment is contained in git branch `lookup_table` and is compared to the version in the `scheduling` branch (the unfair scheduling version). The relevant code is in `htable.c` with some modifications in `sched.c`. The client configuration is as noted above. The score decrease is calculated relative to the unfair scheduling version.
 
 **Results**
 | Seed     | Unfair scheduling | Lookup table |
@@ -79,14 +79,14 @@ The experiment is contained in git branch `lookup_table` and is compared to the 
 
 
 **Conclusion**
-The see that using a lookup table is faster. This was as expected, as the server can skip 20 % of the computation if the repeated request probability is 20 %. Due to the decrease in score, we continued with the lookup table version.
+We see that using a lookup table is faster. This was as expected, as the server can skip 20 % of the computation if the repeated request probability is 20 %. Due to the decrease in score, we continued with the lookup table version.
 
 ## SHA-256 Computation
 
 **Motivation and Description**
-The OpenSSL implementation of SHA-256 hashing is generalized with no assumptions made about its usage. However, our usage is slightly specialized. We know that the input size is always 64 bits long, and we know that we are brute-forcing hashes. For the former, this means we can remove some of the overhead associated with digesting chunks of data as well as have the compiler optimize for the fixed input size. For the latter, this means we can parallelize using SIMD, and it means we can directly reverse the very last part of the hash received from the client, reducing individual hash computation times during brute-forcing. 
+The OpenSSL implementation of SHA-256 hashing is generalized with no assumptions made about its usage. However, our usage is slightly specialized. We know that the input size is always 64 bits long, and we know that we are brute-forcing hashes. For the former, this means we can remove some of the overhead associated with digesting chunks of data as well as have the compiler optimize for the fixed input size. For the latter, this means we can parallelize using SIMD. Since we are only interested in the input and not the computed hash itself, it means that we can directly reverse the very last part of the hash received from the client and comparing to this, reducing individual hash computation times during brute-forcing. 
 
-With these ideas, we first implemented a naive solution, solely based on the first ideas, i.e. no digest overhead and compiler optimization associated with the fixed input length. Afterwards, we implemented a solution based on SIMD (using GCC vector extensions), tested with several configuration: 4-way, 8-way, and 16-way. We also implemented a version that did not use as many assignment operations, but this seemingly made it slower. (This version is referred to in the result section as Slow SIMD.) Finally, we implemented a version using the x86 SHA instructions to try to speed up the computation. 
+With these ideas, we first implemented a naive solution, solely based on the first ideas, i.e. no digest overhead and compiler optimization associated with the fixed input length. Afterwards, we implemented a solution based on SIMD (using GCC vector extensions), tested with several configuration: 4-way, 8-way, and 16-way. We also implemented a version using SIMD that did not use as many assignment operations, but this seemingly made it slower. (This version is referred to in the result section as Slow SIMD.) Finally, we implemented a version using the x86 SHA instructions. However, these instructions are not present on all systems.
 
 **Setup**
 The experiment is contained in git branch `sha_implementation` and compared with the lookup table version (contained in branch `lookup_table`). The lookup table version is almost identical other than the fact that it uses OpenSSL for the SHA-256 implementation. The client configuration is as noted above. The score decrease is calculated relative to the lookup table version.

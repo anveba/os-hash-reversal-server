@@ -40,6 +40,10 @@ void sched_add_task(struct scheduler* sched,
 
     pthread_mutex_lock(&sched->mtx);
 
+    // Check if task has previously been requested. If it was previously completed, we send the
+    // reponse immediately. If it is in progress, we add the client to the list of interested
+    // parties and update the internally used priority. If the task has not been requested before,
+    // we add it to the task queue as normal.
     struct ht_item* ht_item = htable_get(&sched->ht, target_hash);
     if (ht_item) {
         if (ht_item->task->done) {
@@ -82,6 +86,7 @@ void sched_add_task(struct scheduler* sched,
     }
 }
 
+// Free the linked list of clients and send the result to them.
 static void sched_send_result_and_free(struct scheduler* sched, struct tid_list* tid, uint64_t result)
 {
     if (tid == NULL)
@@ -91,6 +96,8 @@ static void sched_send_result_and_free(struct scheduler* sched, struct tid_list*
     free(tid);
 }
 
+// Mark the task as completed. Send results to clients, remember the result in lookup
+// table, and clean up.
 static void sched_finalise_task(struct scheduler* sched, struct task* task, uint64_t result)
 {
     pthread_mutex_lock(&sched->mtx);
@@ -153,6 +160,7 @@ static int sched_get_task(struct scheduler* sched, struct task_slice* task_slice
     return abort;
 }
 
+// Main worker loop. Look for a task, do the task, and finialise the task if the result was found.
 static void sched_worker_loop(struct scheduler* sched)
 {
     while (1) {

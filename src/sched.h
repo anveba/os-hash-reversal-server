@@ -43,8 +43,11 @@ struct scheduler
     void (*callback)(int, uint64_t);
 };
 
+// Initialize the scheduler. Results will be returned via the callback where the first
+// argument is the task ID and the second is the result.
 void sched_init(struct scheduler* sched, void (*callback)(int, uint64_t));
 
+// Destroy the scheduler.
 void sched_destroy(struct scheduler* sched);
 
 // Priorities should be larger than zero.

@@ -66,6 +66,7 @@ static void server_respond(int client_socket_fd, uint64_t result)
 
 static void server_loop(struct server* serv)
 {
+    // Accept client requests and send the tasks to the scheduler.
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);

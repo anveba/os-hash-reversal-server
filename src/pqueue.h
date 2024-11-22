@@ -24,10 +24,16 @@ struct pqueue
 void pqueue_init(struct pqueue* pq);
 void pqueue_destroy(struct pqueue* pq);
 
+// Insert an item into the priority queue.
 void pqueue_insert(struct pqueue* pq, uint64_t key, struct task* task);
 
+// Get the item with the smallest key.
 struct pq_item* pqueue_min(struct pqueue* pq);
+
+// Decrease the key of an item.
 void pqueue_decrease(struct pqueue* pq, pq_node_t k, uint64_t new_key);
+
+// Remove an item.
 void pqueue_remove(struct pqueue* pq, pq_node_t k);
 
 int pqueue_is_empty(struct pqueue* pq);
