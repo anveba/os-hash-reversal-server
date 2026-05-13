@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# This is the configuration of the milestone test run.
+#
+
+SERVER=localhost
+PORT=5003
+SEED=5
+TOTAL=50
+START=0
+DIFFICULTY=30000000
+REP_PROB_PERCENT=0
+DELAY_US=200000
+PRIO_LAMBDA=0.5
+
+./bin/client $SERVER $PORT $SEED $TOTAL $START $DIFFICULTY $REP_PROB_PERCENT $DELAY_US $PRIO_LAMBDA
